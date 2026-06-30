@@ -5,6 +5,7 @@ After=network.target supervisor.service
 Wants=supervisor.service
 
 [Service]
+EnvironmentFile=-/etc/ninja/ninja.env
 Type=simple
 User=root
 WorkingDirectory=/workspace/ninja

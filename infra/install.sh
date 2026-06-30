@@ -107,13 +107,34 @@ mkdir -p /workspace/logs
 echo "  ✓ Log directory ready (/workspace/logs)"
 
 # Write MESSAGING_CHANNEL so all systemd services inherit the correct adapter.
+#
+# IMPORTANT: systemd does NOT read /etc/environment for service units (that file
+# is only consumed by PAM/interactive shells). If we relied on /etc/environment
+# alone, every service would start without MESSAGING_CHANNEL and the messaging
+# factory would fall back to its default ("slack"), crashing on Teams-only
+# installs with: ModuleNotFoundError: No module named 'messaging.slack'.
+#
+# To make the value reliably available to systemd, we write it to a dedicated
+# env file (/etc/ninja/ninja.env) that every unit loads via
+# "EnvironmentFile=-/etc/ninja/ninja.env". We also keep it in /etc/environment
+# so interactive shells / manual runs continue to work.
+
+# 1) Dedicated env file consumed by all ninja systemd units.
+mkdir -p /etc/ninja
+if [[ -f /etc/ninja/ninja.env ]] && grep -q "^MESSAGING_CHANNEL=" /etc/ninja/ninja.env 2>/dev/null; then
+    sed -i "s/^MESSAGING_CHANNEL=.*/MESSAGING_CHANNEL=${MESSAGING_CHANNEL}/" /etc/ninja/ninja.env
+else
+    echo "MESSAGING_CHANNEL=${MESSAGING_CHANNEL}" >> /etc/ninja/ninja.env
+fi
+
+# 2) Keep /etc/environment in sync for interactive shells / manual invocations.
 if grep -q "^MESSAGING_CHANNEL=" /etc/environment 2>/dev/null; then
     sed -i "s/^MESSAGING_CHANNEL=.*/MESSAGING_CHANNEL=${MESSAGING_CHANNEL}/" /etc/environment
 else
     echo "MESSAGING_CHANNEL=${MESSAGING_CHANNEL}" >> /etc/environment
 fi
 export MESSAGING_CHANNEL
-echo "  ✓ Messaging channel: ${MESSAGING_CHANNEL}"
+echo "  ✓ Messaging channel: ${MESSAGING_CHANNEL} (written to /etc/ninja/ninja.env and /etc/environment)"
 
 # ---------------------------------------------------------------------------
 # Step 3: Channel-specific setup
